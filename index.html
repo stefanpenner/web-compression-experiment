@@ -1,0 +1,101 @@
+<h1> WW Compression example </h1>
+<hr>
+<p>
+
+  <h3>Web Worker based Compression</h3>
+  The Library used was a minified distribution (~12kb gzip) of
+  <a href="https://github.com/nodeca/pako">Pako</a> specifically for
+  deflation.<br> It took <b><span id='ready'> Waiting for WebWorker </span></b>
+  for the worker to become ready.<br> The latency for compression of a
+  <b><span id="input_length">Waiting for data to compress</span></b> KB file was <b><span id='compression_cost'> Waiting for Deflate </span></b>.<br>
+  The impact of compression was a <b><span id='compression_impact'> Waiting for Deflate </span></b>.<br>
+  The total latency was: <b><span id="compression_latency"> Waiting for Deflate </span></b>.<br>
+</p>
+<hr>
+
+<p>
+  <h3>Platform Native Compression: <b><span id="native_status"></span></b><br></h3>
+
+  The latency for compression of a
+  <b><span id="native_input_length">Waiting for data to for deflation</span></b> KB file was <b><span id='native_compression_cost'> Waiting for Native Deflate </span></b>.<br>
+  The impact of compression was a <b><span id='native_compression_impact'> Waiting for Native Deflate </span></b>.<br>
+  The total latency was: <b><span id="native_compression_latency"> Waiting for Deflate </span></b>.<br>
+  <pre>
+    <code>
+  const stream = new Response(uncompressed).body.pipeThrough(new CompressionStream('deflate'));
+  const compressed = await new Response(stream).arrayBuffer();
+    </code>
+  </pre>
+</p>
+
+<hr> 
+<script>
+  async function exampleOne() {
+    const readyStart = Date.now();
+    let deflateStart, lastInputLength;
+    const worker = new Worker('worker.js');
+
+    await new Promise((resolve, reject) => {
+      worker.onmessage = async function(response) {
+        try {
+          // TODO: origin check
+          const { type,  payload } = response.data;
+
+          switch (type) {
+            case 'ready': {
+              ready.textContent = `ready: ${Date.now() - readyStart}ms`;
+              deflateStart = Date.now();
+              const response = await fetch('./pako_deflate.min.js');
+              const text = await response.text();
+              lastInputLength = text.length;
+              input_length.textContent = text.length / 1000;
+
+              worker.postMessage(text);
+              break;
+            } case 'response': {
+              compression_cost.textContent = `${Date.now() - deflateStart}ms`;
+              compression_impact.textContent = `${Math.round((1 - (payload.length/lastInputLength)) * 100)}%`;
+              break;
+            } default: {
+              console.log(`WTF: ${type}`);
+            }
+          }
+
+          compression_latency.textContent = `${Date.now() - readyStart}ms`;
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }
+    })
+  }
+
+  async function exampleTwo() {
+    if (typeof CompressionStream === 'undefined') {
+      native_status.textContent = '[Not Supported by this Browser]'
+      native_compression_cost.textContent = `N/A ms`;
+      native_compression_latency.textContent = `N/A ms`;
+      native_input_length.textContent = `N/A`;
+      native_compression_impact.textContent = `N/A %`;
+      return;
+    }
+
+    const response = await fetch('./pako_deflate.min.js');
+    const start = Date.now();
+    const text = await response.text();
+
+    const stream = new Response(text).body.pipeThrough(new CompressionStream('deflate'));
+    const compressed = await new Response(stream).arrayBuffer();
+    const total = Date.now() - start;
+
+    native_compression_cost.textContent = `${total}ms`;
+    native_compression_latency.textContent = `${total}ms`;
+    native_input_length.textContent = text.length / 1000;
+    native_compression_impact.textContent = `${Math.round((1 - (compressed.byteLength/text.length)) * 100)}%`;
+  }
+
+  ;(async function main() {
+    await exampleOne();
+    await exampleTwo();
+  }());
+</script>
